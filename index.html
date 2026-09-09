@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>flash-video 低延迟直播</title>
+  </head>
+  <body>
+    <main id="app">
+      <h1>flash-video 低延迟直播</h1>
+
+      <section id="url-panel">
+        <input
+          id="url-input"
+          type="text"
+          placeholder="粘贴从抖音页面抓取的 .flv 地址"
+          size="60"
+          spellcheck="false"
+        />
+        <button id="play-btn" type="button">播放</button>
+      </section>
+
+      <section id="player-panel" hidden>
+        <video id="video" controls playsinline muted></video>
+        <p id="status-line">水位 -- ms · 状态 --</p>
+      </section>
+
+      <section id="settings-panel">
+        <h2>追帧设置</h2>
+        <label>
+          <input id="catchup-enabled" type="checkbox" checked />
+          追帧总开关
+        </label>
+        <label>
+          变速触发阈值 (ms)
+          <input id="speed-threshold" type="number" min="0" step="100" value="1000" />
+        </label>
+        <label>
+          变速倍率 (1.05 ~ 2.0)
+          <input id="speed-rate" type="number" min="1.05" max="2" step="0.05" value="1.1" />
+        </label>
+        <label>
+          <input id="jump-enabled" type="checkbox" checked />
+          跳帧（超过阈值直切直播边缘）
+        </label>
+        <label>
+          跳帧阈值 (ms)
+          <input id="jump-threshold" type="number" min="1" step="100" value="2000" />
+        </label>
+        <p id="rate-hint" class="hint"></p>
+      </section>
+
+      <!-- 断流/错误提示：提供重新贴入地址的入口 -->
+      <dialog id="error-dialog">
+        <h2>流已中断</h2>
+        <p id="error-message"></p>
+        <p>.flv 地址带签名有时效，过期后需要重新抓取。</p>
+        <input
+          id="retry-url-input"
+          type="text"
+          placeholder="粘贴新的 .flv 地址"
+          size="60"
+          spellcheck="false"
+        />
+        <button id="retry-btn" type="button">恢复播放</button>
+        <button id="dismiss-btn" type="button">关闭</button>
+      </dialog>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
