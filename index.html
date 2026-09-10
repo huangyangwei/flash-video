@@ -25,6 +25,36 @@
         <p id="status-line">水位 -- ms · 状态 --</p>
       </section>
 
+      <section id="watch-panel">
+        <h2>开播监测</h2>
+        <label>
+          直播间链接或房间号
+          <input
+            id="watch-room"
+            type="text"
+            placeholder="https://live.douyin.com/… 或纯房间号"
+            size="45"
+            spellcheck="false"
+          />
+        </label>
+        <label>
+          轮询间隔 (秒)
+          <input id="watch-interval" type="number" min="1" step="1" value="15" />
+        </label>
+        <label>
+          Cookie（被风控时填，选填）
+          <input
+            id="watch-cookie"
+            type="password"
+            placeholder="触发验证码后：F12 → Network → 刷新房间页 → 复制请求的 Cookie 整串"
+            size="45"
+            spellcheck="false"
+          />
+        </label>
+        <button id="watch-toggle" type="button">开始监测</button>
+        <p id="watch-status" class="hint">未监测</p>
+      </section>
+
       <section id="settings-panel">
         <h2>追帧设置</h2>
         <label>

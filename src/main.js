@@ -33,6 +33,7 @@ let player = null;
 let lastUrl = null;
 let currentActionLabel = '正常播放';
 const ACTION_LABELS = { normal: '正常播放', speed: '变速追帧', jump: '跳帧' };
+const RETRY_TOTAL = 3; // 初始连接自动重试次数（spec: 递增退避共 3 次）
 
 function currentUrl() {
   return (urlInput.value || retryUrlInput.value || '').trim();
@@ -86,6 +87,11 @@ function startPlayback(url) {
       },
       onError: showError,
       onStall: showError,
+      // 初始连接失败自动重试（design D5）：UI 展示重试进度，不弹错误框
+      onRetry: (attempt, delayMs) => {
+        currentActionLabel = `重试中 ${attempt}/${RETRY_TOTAL}`;
+        statusLine.textContent = `连接失败，${Math.round(delayMs / 1000)}s 后第 ${attempt}/${RETRY_TOTAL} 次重试…`;
+      },
     });
   }
   if (player.start(url, settings)) {
@@ -118,3 +124,91 @@ for (const input of [...Object.values(settingsInputs), jumpEnabledInput]) {
 }
 
 syncSettingsToUi();
+
+// 深链自动开播（spec: 深链参数自动开播）：watch 脚本唤起时带 #/?url= 参数，
+// 走与手动粘贴完全相同的校验与开播路径；地址回填输入框让用户可见来源。
+// 参数缺失 = 现状不变。注意用 hash 而非查询串传参：vite dev 的安全补丁
+// 会对含编码绝对 URL 的查询串做 fs 校验直接 403，hash 不经过服务器。
+const hashPart = location.hash.replace(/^#\/?/, ''); // '#/?url=x' -> '?url=x'
+const hashQuery = hashPart.startsWith('?') ? hashPart.slice(1) : hashPart;
+const deepLinkUrl = new URLSearchParams(hashQuery).get('url')?.trim();
+if (deepLinkUrl) {
+  urlInput.value = deepLinkUrl;
+  startPlayback(deepLinkUrl);
+}
+
+// ---- 开播监测（spec: 播放页配置监测）----
+// 轮询跑在 dev server 侧（/__watch/api，vite 插件），页面只做配置与结果消费。
+const watchRoom = $('watch-room');
+const watchInterval = $('watch-interval');
+const watchCookie = $('watch-cookie');
+const watchToggle = $('watch-toggle');
+const watchStatus = $('watch-status');
+const WATCH_API = '/__watch/api';
+const WATCH_STATUS_POLL_MS = 2000;
+let autoStartedUrl = null; // 同一场直播只自动开播一次
+let watchEnabled = false; // 最近一次状态轮询的引擎开关
+
+watchRoom.value = localStorage.getItem('watchRoom') ?? '';
+watchInterval.value = localStorage.getItem('watchInterval') ?? 15;
+watchCookie.value = localStorage.getItem('watchCookie') ?? '';
+
+function renderWatchStatus(s) {
+  watchEnabled = s.enabled;
+  watchToggle.textContent = s.enabled ? '停止监测' : '开始监测';
+  if (!s.enabled) {
+    watchStatus.textContent = '未监测';
+    return;
+  }
+  const checked = s.lastCheckAt ? new Date(s.lastCheckAt).toLocaleTimeString('zh-CN', { hour12: false }) : '--';
+  const state = s.lastError
+    ? `失败(${s.failCount}次): ${s.lastError} · 退避中`
+    : s.live
+      ? `直播中 · 已自动开播`
+      : '未开播';
+  const cookieTag = s.cookie ? ' · 已带 Cookie' : '';
+  watchStatus.textContent = `监测房间 ${s.room} · 间隔 ${s.intervalMs / 1000}s${cookieTag} · ${state} · 上次检查 ${checked}`;
+}
+
+async function watchApi(action, payload = {}) {
+  const res = await fetch(WATCH_API, {
+    method: action === undefined ? 'GET' : 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: action === undefined ? undefined : JSON.stringify({ action, ...payload }),
+  });
+  return res.json();
+}
+
+watchToggle.addEventListener('click', async () => {
+  const room = watchRoom.value.trim() || '134525032676'; // 留空 = 默认房间
+  const sec = Number(watchInterval.value) || 15;
+  const cookie = watchCookie.value.trim(); // 选填：被风控时填浏览器 Cookie
+  const action = watchEnabled ? 'stop' : 'start';
+  localStorage.setItem('watchRoom', watchRoom.value);
+  localStorage.setItem('watchInterval', String(sec));
+  localStorage.setItem('watchCookie', watchCookie.value);
+  const result = await watchApi(
+    action,
+    action === 'start' ? { room, intervalSec: sec, cookie } : {}
+  );
+  if (result.ok === false) {
+    watchStatus.textContent = `操作失败: ${result.error}`;
+  }
+  renderWatchStatus(result);
+});
+
+// 状态轮询 + 开播消费：监测到直播中且是新的一场 -> 自动开播
+setInterval(async () => {
+  try {
+    const s = await watchApi();
+    renderWatchStatus(s);
+    if (s.enabled && s.live && s.flvUrl && s.flvUrl !== autoStartedUrl) {
+      autoStartedUrl = s.flvUrl;
+      urlInput.value = s.flvUrl; // 回填让用户可见来源
+      startPlayback(s.flvUrl);
+    }
+  } catch {
+    // dev server 未挂插件（如生产构建）时静默，面板保持原样
+    watchStatus.textContent = '监测服务不可用（需要 npm run dev 运行）';
+  }
+}, WATCH_STATUS_POLL_MS);
